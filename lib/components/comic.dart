@@ -942,6 +942,9 @@ class ComicList extends StatefulWidget {
     this.trailingSliver,
     this.errorLeading,
     this.menuBuilder,
+    this.selections,
+    this.onTap,
+    this.onLongPressed,
     this.controller,
     this.refreshHandlerCallback,
     this.enablePageStorage = false,
@@ -958,6 +961,12 @@ class ComicList extends StatefulWidget {
   final Widget? errorLeading;
 
   final List<MenuEntry> Function(Comic)? menuBuilder;
+
+  final Map<Comic, bool>? selections;
+
+  final void Function(Comic, int heroID)? onTap;
+
+  final void Function(Comic, int heroID)? onLongPressed;
 
   final ScrollController? controller;
 
@@ -1253,6 +1262,9 @@ class ComicListState extends State<ComicList> {
         SliverGridComics(
           comics: _data[_page] ?? const [],
           menuBuilder: widget.menuBuilder,
+          selections: widget.selections,
+          onTap: widget.onTap,
+          onLongPressed: widget.onLongPressed,
         ),
         if (_data[_page]!.length > 6 && _maxPage != 1)
           _buildSliverPageSelector(),
@@ -1302,6 +1314,9 @@ class ComicListState extends State<ComicList> {
         SliverGridComics(
           comics: _data.values.expand((element) => element).toList(),
           menuBuilder: widget.menuBuilder,
+          selections: widget.selections,
+          onTap: widget.onTap,
+          onLongPressed: widget.onLongPressed,
           onLastItemBuild: () {
             if (_error == null && (_maxPage == null || _data.length < _maxPage!)) {
               _loadPage(_data.length + 1);

@@ -3,7 +3,12 @@ import 'package:venera/components/components.dart';
 import 'package:venera/foundation/app.dart';
 import 'package:venera/foundation/appdata.dart';
 import 'package:venera/foundation/comic_source/comic_source.dart';
+import 'package:venera/foundation/comic_type.dart';
+import 'package:venera/foundation/consts.dart';
 import 'package:venera/foundation/global_state.dart';
+import 'package:venera/foundation/local.dart';
+import 'package:venera/network/download.dart';
+import 'package:venera/pages/favorites/favorites_page.dart';
 import 'package:venera/pages/search_page.dart';
 import 'package:venera/utils/ext.dart';
 import 'package:venera/utils/tags_translation.dart';
@@ -36,6 +41,10 @@ class _SearchResultPageState extends State<SearchResultPage> {
 
   late String text;
 
+  bool multiSelectMode = false;
+
+  final Map<Comic, bool> selectedComics = {};
+
   OverlayEntry? get suggestionOverlay => suggestionsController.entry;
 
   late _SuggestionsController suggestionsController;
@@ -48,6 +57,8 @@ class _SearchResultPageState extends State<SearchResultPage> {
       text = checkAutoLanguage(text);
       setState(() {
         this.text = text!;
+        multiSelectMode = false;
+        selectedComics.clear();
       });
       appdata.addSearchHistory(text);
       controller.currentText = text;
@@ -145,35 +156,55 @@ class _SearchResultPageState extends State<SearchResultPage> {
   @override
   Widget build(BuildContext context) {
     var source = ComicSource.find(sourceKey);
-    return ComicList(
-      key: Key(text + options.toString() + sourceKey),
-      errorLeading: AppSearchBar(
-        controller: controller,
-        action: buildAction(),
+    return PopScope(
+      canPop: !multiSelectMode,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (multiSelectMode) {
+          setState(() {
+            multiSelectMode = false;
+            selectedComics.clear();
+          });
+        }
+      },
+      child: ComicList(
+        key: Key(text + options.toString() + sourceKey),
+        errorLeading: multiSelectMode
+            ? buildMultiSelectAppbar()
+            : AppSearchBar(
+                controller: controller,
+                action: buildAction(),
+              ),
+        leadingSliver: multiSelectMode
+            ? buildMultiSelectSliverAppbar()
+            : SliverSearchBar(
+                controller: controller,
+                onChanged: onChanged,
+                action: buildAction(),
+              ),
+        menuBuilder: buildMenuOptions,
+        selections: multiSelectMode ? selectedComics : null,
+        onTap: multiSelectMode ? onTapComic : null,
+        onLongPressed: onLongPressComic,
+        loadPage: source!.searchPageData!.loadPage == null
+            ? null
+            : (i) {
+                return source.searchPageData!.loadPage!(
+                  text,
+                  i,
+                  options,
+                );
+              },
+        loadNext: source.searchPageData!.loadNext == null
+            ? null
+            : (i) {
+                return source.searchPageData!.loadNext!(
+                  text,
+                  i,
+                  options,
+                );
+              },
       ),
-      leadingSliver: SliverSearchBar(
-        controller: controller,
-        onChanged: onChanged,
-        action: buildAction(),
-      ),
-      loadPage: source!.searchPageData!.loadPage == null
-          ? null
-          : (i) {
-              return source.searchPageData!.loadPage!(
-                text,
-                i,
-                options,
-              );
-            },
-      loadNext: source.searchPageData!.loadNext == null
-          ? null
-          : (i) {
-              return source.searchPageData!.loadNext!(
-                text,
-                i,
-                options,
-              );
-            },
     );
   }
 
@@ -200,10 +231,181 @@ class _SearchResultPageState extends State<SearchResultPage> {
               previousSourceKey != sourceKey) {
             text = checkAutoLanguage(controller.text);
             controller.currentText = text;
+            multiSelectMode = false;
+            selectedComics.clear();
             setState(() {});
           }
         },
       ),
+    );
+  }
+
+  void onTapComic(Comic c, int heroID) {
+    setState(() {
+      if (selectedComics.containsKey(c)) {
+        selectedComics.remove(c);
+        if (selectedComics.isEmpty) {
+          multiSelectMode = false;
+        }
+      } else {
+        selectedComics[c] = true;
+      }
+    });
+  }
+
+  void onLongPressComic(Comic c, int heroID) {
+    if (suggestionOverlay != null) {
+      suggestionsController.remove();
+    }
+    setState(() {
+      multiSelectMode = true;
+      selectedComics[c] = true;
+    });
+  }
+
+  List<MenuEntry> buildMenuOptions(Comic c) {
+    return [
+      MenuEntry(
+        icon: Icons.check,
+        text: "Select".tl,
+        onClick: () {
+          if (suggestionOverlay != null) {
+            suggestionsController.remove();
+          }
+          setState(() {
+            multiSelectMode = true;
+            if (selectedComics.containsKey(c)) {
+              selectedComics.remove(c);
+              if (selectedComics.isEmpty) {
+                multiSelectMode = false;
+              }
+            } else {
+              selectedComics[c] = true;
+            }
+          });
+        },
+      ),
+      MenuEntry(
+        icon: Icons.download,
+        text: "Download".tl,
+        onClick: () {
+          if (downloadComic(c)) {
+            App.rootContext.showMessage(message: "Download started".tl);
+          } else {
+            App.rootContext.showMessage(
+              message: "Already downloaded or downloading.".tl,
+            );
+          }
+        },
+      ),
+    ];
+  }
+
+  bool downloadComic(Comic c) {
+    var source = ComicSource.find(c.sourceKey);
+    if (source == null) {
+      return false;
+    }
+
+    final type = ComicType(source.key.hashCode);
+    if (LocalManager().isDownloaded(c.id, type) ||
+        LocalManager().isDownloading(c.id, type)) {
+      return false;
+    }
+
+    LocalManager().addTask(ImagesDownloadTask(
+      source: source,
+      comicId: c.id,
+      comicTitle: c.title,
+    ));
+    return true;
+  }
+
+  void downloadSelected() {
+    int count = 0;
+    for (var c in selectedComics.keys) {
+      if (downloadComic(c)) {
+        count++;
+      }
+    }
+    if (count > 0) {
+      App.rootContext.showMessage(
+        message: "Added @c comics to download queue.".tlParams({"c": count}),
+      );
+    } else if (selectedComics.isNotEmpty) {
+      App.rootContext.showMessage(
+        message: "Already downloaded or downloading.".tl,
+      );
+    }
+  }
+
+  void favoriteSelected() {
+    if (selectedComics.isEmpty) {
+      return;
+    }
+    addFavorite(selectedComics.keys.toList());
+  }
+
+  List<Widget> buildMultiSelectActions() {
+    return [
+      Tooltip(
+        message: "Add to favorites".tl,
+        child: IconButton(
+          onPressed: selectedComics.isEmpty ? null : favoriteSelected,
+          icon: const Icon(Icons.stars_outlined),
+        ),
+      ),
+      Tooltip(
+        message: "Download".tl,
+        child: IconButton(
+          onPressed: selectedComics.isEmpty ? null : downloadSelected,
+          icon: const Icon(Icons.download),
+        ),
+      ),
+    ];
+  }
+
+  Widget buildMultiSelectSliverAppbar() {
+    return SliverAppbar(
+      leading: Tooltip(
+        message: "Cancel".tl,
+        child: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () {
+            setState(() {
+              multiSelectMode = false;
+              selectedComics.clear();
+            });
+          },
+        ),
+      ),
+      title: Text(
+        "Selected @c comics".tlParams({"c": selectedComics.length}),
+      ),
+      actions: buildMultiSelectActions(),
+      style: context.width < changePoint ? AppbarStyle.shadow : AppbarStyle.blur,
+    );
+  }
+
+  Widget buildMultiSelectAppbar() {
+    return Appbar(
+      leading: Tooltip(
+        message: "Cancel".tl,
+        child: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () {
+            setState(() {
+              multiSelectMode = false;
+              selectedComics.clear();
+            });
+          },
+        ),
+      ),
+      title: Text(
+        "Selected @c comics".tlParams({"c": selectedComics.length}),
+      ),
+      actions: buildMultiSelectActions(),
+      style: context.width < changePoint ? AppbarStyle.shadow : AppbarStyle.blur,
     );
   }
 }
