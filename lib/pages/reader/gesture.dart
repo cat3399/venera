@@ -18,8 +18,6 @@ class _ReaderGestureDetectorState extends AutomaticGlobalState<_ReaderGestureDet
 
   static const _kDoubleTapMaxDistanceSquared = 20.0 * 20.0;
 
-  static const _kTapToTurnPagePercent = 0.3;
-
   final _dragListeners = <_DragListener>[];
 
   int fingers = 0;
@@ -195,66 +193,38 @@ class _ReaderGestureDetectorState extends AutomaticGlobalState<_ReaderGestureDet
       if (reader.isOnChapterCommentsPage) {
         return;
       }
-      if (appdata.settings.getReaderSetting(
-          reader.cid, reader.type.sourceKey, 'enableTapToTurnPages')) {
-        bool isLeft = false, isRight = false, isTop = false, isBottom = false;
-        final width = context.width;
-        final height = context.height;
-        final x = location.dx;
-        final y = location.dy;
-        if (x < width * _kTapToTurnPagePercent) {
-          isLeft = true;
-        } else if (x > width * (1 - _kTapToTurnPagePercent)) {
-          isRight = true;
-        }
-        if (y < height * _kTapToTurnPagePercent) {
-          isTop = true;
-        } else if (y > height * (1 - _kTapToTurnPagePercent)) {
-          isBottom = true;
-        }
-        bool isCenter = false;
-        var prev = () => context.reader.toPrevPage();
-        var next = () => context.reader.toNextPage();
-        if (appdata.settings.getReaderSetting(
-            reader.cid, reader.type.sourceKey, 'reverseTapToTurnPages')) {
-          prev = () => context.reader.toNextPage();
-          next = () => context.reader.toPrevPage();
-        }
-        switch (context.reader.mode) {
-          case ReaderMode.galleryLeftToRight:
-          case ReaderMode.continuousLeftToRight:
-            if (isLeft) {
-              prev();
-            } else if (isRight) {
-              next();
-            } else {
-              isCenter = true;
-            }
-          case ReaderMode.galleryRightToLeft:
-          case ReaderMode.continuousRightToLeft:
-            if (isLeft) {
-              next();
-            } else if (isRight) {
-              prev();
-            } else {
-              isCenter = true;
-            }
-          case ReaderMode.galleryTopToBottom:
-          case ReaderMode.continuousTopToBottom:
-            if (isTop) {
-              prev();
-            } else if (isBottom) {
-              next();
-            } else {
-              isCenter = true;
-            }
-        }
-        if (!isCenter) {
+      switch (_getTapZoneAction(location)) {
+        case 'prevPage':
+          context.reader.toPrevPage();
           return;
-        }
+        case 'nextPage':
+          context.reader.toNextPage();
+          return;
+        case 'none':
+          return;
+        case 'openOsd':
+          context.readerScaffold.openOrClose();
+          return;
+        default:
+          context.readerScaffold.openOrClose();
+          return;
       }
-      context.readerScaffold.openOrClose();
     }
+  }
+
+  String _getTapZoneAction(Offset location) {
+    final width = context.width;
+    final settingKey = location.dx < width / 3
+        ? 'readerTapZoneLeft'
+        : location.dx < width * 2 / 3
+        ? 'readerTapZoneCenter'
+        : 'readerTapZoneRight';
+    return appdata.settings.getReaderSetting(
+          reader.cid,
+          reader.type.sourceKey,
+          settingKey,
+        ) as String? ??
+        'openOsd';
   }
 
   void onDoubleTap(Offset location) {

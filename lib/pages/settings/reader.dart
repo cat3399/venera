@@ -88,6 +88,12 @@ class _ReaderSettingsState extends State<ReaderSettings> {
     final comicId = widget.comicId;
     final sourceKey = widget.comicSource;
     final key = "$comicId@$sourceKey";
+    final tapZoneActionOptions = {
+      "openOsd": "Show OSD".tl,
+      "none": "No action".tl,
+      "nextPage": "Next page".tl,
+      "prevPage": "Previous page".tl,
+    };
 
     bool isEnabledSpecificSettings =
         comicId != null &&
@@ -128,20 +134,32 @@ class _ReaderSettingsState extends State<ReaderSettings> {
               Divider().toSliver(),
             ],
           ),
-        _SwitchSetting(
-          title: "Tap to turn Pages".tl,
-          settingKey: "enableTapToTurnPages",
+        SelectSetting(
+          title: "Left tap area action".tl,
+          settingKey: "readerTapZoneLeft",
+          optionTranslation: tapZoneActionOptions,
           onChanged: () {
-            widget.onChanged?.call("enableTapToTurnPages");
+            widget.onChanged?.call("readerTapZoneLeft");
           },
           comicId: isEnabledSpecificSettings ? widget.comicId : null,
           comicSource: isEnabledSpecificSettings ? widget.comicSource : null,
         ).toSliver(),
-        _SwitchSetting(
-          title: "Reverse tap to turn Pages".tl,
-          settingKey: "reverseTapToTurnPages",
+        SelectSetting(
+          title: "Center tap area action".tl,
+          settingKey: "readerTapZoneCenter",
+          optionTranslation: tapZoneActionOptions,
           onChanged: () {
-            widget.onChanged?.call("reverseTapToTurnPages");
+            widget.onChanged?.call("readerTapZoneCenter");
+          },
+          comicId: isEnabledSpecificSettings ? widget.comicId : null,
+          comicSource: isEnabledSpecificSettings ? widget.comicSource : null,
+        ).toSliver(),
+        SelectSetting(
+          title: "Right tap area action".tl,
+          settingKey: "readerTapZoneRight",
+          optionTranslation: tapZoneActionOptions,
+          onChanged: () {
+            widget.onChanged?.call("readerTapZoneRight");
           },
           comicId: isEnabledSpecificSettings ? widget.comicId : null,
           comicSource: isEnabledSpecificSettings ? widget.comicSource : null,

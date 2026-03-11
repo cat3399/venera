@@ -188,6 +188,9 @@ class Settings with ChangeNotifier {
     'readerScreenPicNumberForPortrait': 1, // 1 - 5
     'enableTapToTurnPages': true,
     'reverseTapToTurnPages': false,
+    'readerTapZoneLeft': 'prevPage',
+    'readerTapZoneCenter': 'openOsd',
+    'readerTapZoneRight': 'nextPage',
     'enablePageAnimation': true,
     'language': 'system', // system, zh-CN, zh-TW, en-US
     'cacheSize': 2048, // in MB
